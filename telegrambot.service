@@ -1,0 +1,14 @@
+[Unit]
+Description=Telegram Bot Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/gworkspace-telegram-admin/bot.py
+WorkingDirectory=/usr/local/gworkspace-telegram-admin/
+StandardOutput=inherit
+StandardError=inherit
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target
