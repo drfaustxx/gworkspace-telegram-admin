@@ -20,6 +20,8 @@ from email.mime.text import MIMEText
 import os
 from dotenv import load_dotenv
 from tabulate import tabulate
+from functools import wraps
+import inspect
 
 load_dotenv()
 
@@ -57,7 +59,24 @@ if not creds or not creds.valid:
 
 gmail_service = build('gmail', 'v1', credentials=creds)
 
-
+try:
+    # Trying to open log sheet
+    log_sheet = client.open(os.getenv('LOGS_SHEET_FILENAME')).sheet1
+except Exception as e:
+    # If it is not exists, trying to create it
+    log_spreadsheet = client.create(os.getenv('LOGS_SHEET_FILENAME'))
+    log_sheet = log_spreadsheet.sheet1
+    
+    # Setting headers
+    headers = [
+        'Timestamp',
+        'Username',
+        'User ID',
+        'Type',
+        'Content',
+        'Handler'
+    ]
+    log_sheet.append_row(headers)
 
 def create_message(sender, to, subject, message_text, reply_to=None):
     message = MIMEText(message_text)
@@ -85,6 +104,51 @@ def is_authorized(username):
     """Check if a user is authorized to use the bot."""
     return username in BOT_ALLOWED_USERS
 
+def log_to_sheet(func):
+    """Decorator for logging messages to Google Spreadsheet."""
+    @wraps(func)
+    async def wrapper(update: Update, context: CallbackContext, *args, **kwargs):
+        try:
+            # Getting log sheet
+            log_sheet = client.open(os.getenv('LOGS_SHEET_FILENAME')).sheet1
+            
+            # Collecting message information
+            timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            username = update.effective_user.username
+            user_id = update.effective_user.id
+            
+            # Determining message type (command or text)
+            if update.message.text.startswith('/'):
+                message_type = 'command'
+                content = update.message.text
+            else:
+                message_type = 'message'
+                content = update.message.text
+
+            # Getting handler name
+            handler_name = func.__name__
+
+            # Writing to the sheet
+            log_sheet.append_row([
+                timestamp,
+                username,
+                str(user_id),
+                message_type,
+                content,
+                handler_name
+            ])
+
+        except Exception as e:
+            logger.error(f"Error logging to sheet: {e}")
+            # Not interrupting the main function execution in case of logging error
+            pass
+
+        # Executing the original function
+        return await func(update, context, *args, **kwargs)
+
+    return wrapper
+
+@log_to_sheet
 async def start(update: Update, context: CallbackContext) -> None:
     """Send a welcome message and instructions when the /start command is issued."""
     if not is_authorized(update.message.from_user.username):
@@ -92,6 +156,7 @@ async def start(update: Update, context: CallbackContext) -> None:
         return
     await update.message.reply_text('Hello! Plaese send me a message in the format:\nName Surname\nDesired email\nExisting email\nComment')
 
+@log_to_sheet
 async def handle_message(update: Update, context: CallbackContext) -> None:
     """Handle incoming messages and process the user information."""
     if not is_authorized(update.message.from_user.username):
@@ -184,6 +249,7 @@ def generate_email_text(first_name, last_name, desired_email, password):
     """
     return text
 
+@log_to_sheet
 async def add_user(update: Update, context: CallbackContext) -> None:
     """Add a new user to Google Workspace."""
     if not is_authorized(update.message.from_user.username):
@@ -246,6 +312,7 @@ async def add_user(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text(f"There is an error sending email. Please verify your input. {e}")
 
 
+@log_to_sheet
 async def suspend_user(update: Update, context: CallbackContext) -> None:
     """Suspend a user by their email address."""
     if not is_authorized(update.message.from_user.username):
@@ -266,6 +333,7 @@ async def suspend_user(update: Update, context: CallbackContext) -> None:
         logger.error(f"There is an error suspending user in Google Workspace: {e}")
         await update.message.reply_text('There is an error suspending user in Google Workspace. Please try again later.')
 
+@log_to_sheet
 async def get_user_info(update: Update, context: CallbackContext) -> None:
     """Retrieve user information by their email address."""
     if not is_authorized(update.message.from_user.username):
@@ -291,6 +359,7 @@ async def get_user_info(update: Update, context: CallbackContext) -> None:
         logger.error(f"Error retrieving user info from Google Workspace: {e}")
         await update.message.reply_text('Error retrieving user info from Google Workspace. Please try again later.')
 
+@log_to_sheet
 async def help_command(update: Update, context: CallbackContext) -> None:
     """Send a message when the command /help is issued."""
     if not is_authorized(update.message.from_user.username):
@@ -309,6 +378,7 @@ async def help_command(update: Update, context: CallbackContext) -> None:
     )
     await update.message.reply_text(help_text)
 
+@log_to_sheet
 async def list_users(update: Update, context: CallbackContext) -> None:
     """List all users with their status and last login date."""
     if not is_authorized(update.message.from_user.username):
@@ -402,6 +472,7 @@ async def list_users(update: Update, context: CallbackContext) -> None:
         logger.error(f"Error retrieving users from Google Workspace: {e}")
         await update.message.reply_text('Error retrieving users from Google Workspace. Please try again later.')
 
+@log_to_sheet
 async def reset_password(update: Update, context: CallbackContext) -> None:
     """Reset a user's password and force them to change it on next login."""
     if not is_authorized(update.message.from_user.username):

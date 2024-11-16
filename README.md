@@ -17,11 +17,13 @@ This project automates the tasks of creating new Google Workspace accounts and s
    - Use @BotFather to register your bot and save its token to `.env`.
 
 2. **Create a Google Sheet and access its API:**
-   - Create a new Google Sheet.
+This bot uses Google Sheets to store the list of created accounts and logs.
+   - Create two new Google Sheet files:one for accounts list, other one for logs.
    - Go to the Google Cloud Console and create a new project.
    - Enable the API for Google Sheets and Google Drive.
    - Create credentials to access the API and save a JSON file with the key to the `credentials/` directory.
    - Put the filename obtained from Google into `.env`.
+   - Take the `client_email` from the JSON file and grant Editor permissons for both Google Sheet files with it.
 
 3. **Set up Google Workspace API:**
    - Enable the Admin SDK API.
