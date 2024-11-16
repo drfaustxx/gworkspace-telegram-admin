@@ -19,6 +19,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from email.mime.text import MIMEText
 import os
 from dotenv import load_dotenv
+from tabulate import tabulate
 
 load_dotenv()
 
@@ -302,9 +303,103 @@ async def help_command(update: Update, context: CallbackContext) -> None:
         "/suspend <email> - Suspend a user by their email address\n"
         "/userinfo <email> - Retrieve user information by their email address\n"
         "/adduser <First Name> <Last Name> <Desired Email> <Secondary Email> <Comment> - Add a new user to Google Workspace\n"
+        "/listusers - Lists all users in Google Workspace\n"
         "/help - Show this help message"
     )
     await update.message.reply_text(help_text)
+
+async def list_users(update: Update, context: CallbackContext) -> None:
+    """List all users with their status and last login date."""
+    if not is_authorized(update.message.from_user.username):
+        await update.message.reply_text('You are not authorised to use this command.')
+        return
+
+    try:
+        # Get list of all users with pagination
+        users = []
+        page_token = None
+        while True:
+            results = service.users().list(
+                customer='my_customer',
+                orderBy='email',
+                projection='full',
+                pageToken=page_token,
+                maxResults=500  # Maximum allowed by the API
+            ).execute()
+            
+            users.extend(results.get('users', []))
+            page_token = results.get('nextPageToken')
+            if not page_token:
+                break
+
+        # Prepare data for table
+        table_data = []
+        for user in users:
+            email = user['primaryEmail']
+            # Skip protected accounts if needed
+            if email in BOT_PROTECTED_ACCOUNTS:
+                continue
+                
+            is_suspended = user.get('suspended', False)
+            status = '🔴 Suspended' if is_suspended else '🟢 Active'
+            
+            # Get last login time
+            last_login = user.get('lastLoginTime', None)
+            if last_login:
+                # Convert to datetime and format
+                last_login_dt = datetime.datetime.strptime(last_login, "%Y-%m-%dT%H:%M:%S.%fZ")
+                last_login_str = last_login_dt.strftime("%Y-%m-%d %H:%M")
+            else:
+                last_login_str = "Never"
+
+            # Get creation time
+            creation_time = user.get('creationTime', None)
+            if creation_time:
+                creation_dt = datetime.datetime.strptime(creation_time, "%Y-%m-%dT%H:%M:%S.%fZ")
+                creation_str = creation_dt.strftime("%Y-%m-%d %H:%M")
+            else:
+                creation_str = "Unknown"
+
+            table_data.append([
+                email,
+                status,
+                creation_str,
+                last_login_str
+            ])
+
+        if not table_data:
+            await update.message.reply_text('No users found.')
+            return
+
+        # Split table_data into chunks of 50 rows
+        chunk_size = 50
+        for i in range(0, len(table_data), chunk_size):
+            chunk = table_data[i:i + chunk_size]
+            
+            # Create table for this chunk
+            table = tabulate(
+                chunk,
+                headers=['Email', 'Status', 'Created On', 'Last Login'],
+                tablefmt='simple',
+                numalign='left'
+            )
+            
+            # Add page number info
+            page_number = f"\nPage {i//chunk_size + 1} of {(len(table_data) + chunk_size - 1)//chunk_size}"
+            
+            # Send message with this chunk
+            try:
+                await update.message.reply_text(
+                    f'```\n{table}{page_number}\n```', 
+                    parse_mode='MarkdownV2'
+                )
+            except Exception as e:
+                # If markdown parsing fails, try sending without special formatting
+                await update.message.reply_text(f'{table}{page_number}')
+            
+    except HttpError as e:
+        logger.error(f"Error retrieving users from Google Workspace: {e}")
+        await update.message.reply_text('Error retrieving users from Google Workspace. Please try again later.')
 
 def main() -> None:
     """Start the bot."""
@@ -317,6 +412,7 @@ def main() -> None:
     application.add_handler(CommandHandler("userinfo", get_user_info))  # Add this line
     application.add_handler(CommandHandler("adduser", add_user))
     application.add_handler(CommandHandler("help", help_command))  # Add this line
+    application.add_handler(CommandHandler("listusers", list_users))  # Add this line
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     application.run_polling()
