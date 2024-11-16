@@ -11,22 +11,24 @@ import os
 
 # Add the directory containing config.py to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-import config
+from dotenv import load_dotenv
+
+load_dotenv()
 
 GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 
 def get_credentials():
     """Get Google API credentials."""
     creds = None
-    if os.path.exists(config.GMAIL_TOKEN_FILE):
-        creds = Credentials.from_authorized_user_file(config.GMAIL_TOKEN_FILE, GMAIL_SCOPES)
+    if os.path.exists(os.getenv('GMAIL_TOKEN_FILE')):
+        creds = Credentials.from_authorized_user_file(os.getenv('GMAIL_TOKEN_FILE'), GMAIL_SCOPES)
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(config.GMAIL_CREDENTIALS_FILE, GMAIL_SCOPES)
+            flow = InstalledAppFlow.from_client_secrets_file(os.getenv('GMAIL_CREDENTIALS_FILE'), GMAIL_SCOPES)
             creds = flow.run_local_server(port=0)
-        with open(config.GMAIL_TOKEN_FILE, 'w') as token:
+        with open(os.getenv('GMAIL_TOKEN_FILE'), 'w') as token:
             token.write(creds.to_json())
     return creds
 
@@ -54,8 +56,8 @@ def main():
     creds = get_credentials()
     service = build('gmail', 'v1', credentials=creds)
 
-    sender = config.GMAIL_SENDER_ADDRESS
-    to = config.GWORKSPACE_ADMIN_ACCOUNT
+    sender = os.getenv('GMAIL_SENDER_ADDRESS')
+    to = os.getenv('GWORKSPACE_ADMIN_ACCOUNT')
     subject = "Access Details for Google Workspace Account"
     message_text = """
     Hello,

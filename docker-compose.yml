@@ -1,13 +1,11 @@
 version: '3.8'
 
 services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: telegram_bot
+  bot:
+    build: .
     volumes:
-      - .:/usr/src/app
+      - ./credentials:/usr/src/app/credentials
+      - ./.env:/usr/src/app/.env
+    restart: unless-stopped
     environment:
-      - NAME=World
-    command: python bot.py
+      - TZ=UTC

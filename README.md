@@ -14,19 +14,19 @@ This project automates the tasks of creating new Google Workspace accounts and s
 ## Configuring the Google Workspace Admin in Telegram
 
 1. **Register your bot in Telegram:**
-   - Use @BotFather to register your bot and save its token to `config.py`.
+   - Use @BotFather to register your bot and save its token to `.env`.
 
 2. **Create a Google Sheet and access its API:**
    - Create a new Google Sheet.
    - Go to the Google Cloud Console and create a new project.
    - Enable the API for Google Sheets and Google Drive.
    - Create credentials to access the API and save a JSON file with the key to the `credentials/` directory.
-   - Put the filename obtained from Google into `config.py`.
+   - Put the filename obtained from Google into `.env`.
 
 3. **Set up Google Workspace API:**
    - Enable the Admin SDK API.
    - Create credentials, upload, and save a JSON file with the key to the `credentials/` directory.
-   - Put the filename obtained from Google into `config.py`.
+   - Put the filename obtained from Google into `.env`.
 
 4. **Using the Gmail API:**
    - Enable the Gmail API in the Google Cloud Console.

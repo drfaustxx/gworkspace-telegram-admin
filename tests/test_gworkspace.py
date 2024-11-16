@@ -6,7 +6,9 @@ import logging
 
 # Add the directory containing config.py to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-import config
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Constants
 SCOPES = ['https://www.googleapis.com/auth/admin.directory.user']
@@ -18,12 +20,12 @@ logger = logging.getLogger(__name__)
 
 def get_domain_from_admin_account():
     """Extract the domain from the GWORKSPACE_ADMIN_ACCOUNT email address."""
-    return config.GWORKSPACE_ADMIN_ACCOUNT.split('@')[1]
+    return os.getenv('GWORKSPACE_ADMIN_ACCOUNT').split('@')[1]
 
 def list_users():
     """List the first 10 users in the domain."""
-    creds = service_account.Credentials.from_service_account_file(config.GWORKSPACE_CREDS_FILE, scopes=SCOPES)
-    delegated_creds = creds.with_subject(config.GWORKSPACE_ADMIN_ACCOUNT)
+    creds = service_account.Credentials.from_service_account_file(os.getenv('GWORKSPACE_CREDS_FILE'), scopes=SCOPES)
+    delegated_creds = creds.with_subject(os.getenv('GWORKSPACE_ADMIN_ACCOUNT'))
     service = build('admin', 'directory_v1', credentials=delegated_creds)
 
     logger.info('Getting the first %d users in the domain', MAX_RESULTS)

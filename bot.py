@@ -17,8 +17,10 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from email.mime.text import MIMEText
+import os
+from dotenv import load_dotenv
 
-import config
+load_dotenv()
 
 # Setup logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -26,14 +28,14 @@ logger = logging.getLogger(__name__)
 
 # Google Sheets API configuration
 SCOPE = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
-CREDS = ServiceAccountCredentials.from_json_keyfile_name(config.GWORKSPACE_CREDS_FILE, SCOPE)
+CREDS = ServiceAccountCredentials.from_json_keyfile_name(os.getenv('GWORKSPACE_CREDS_FILE'), SCOPE)
 client = gspread.authorize(CREDS)
-sheet = client.open(config.SPREADSHEET_FILENAME).sheet1
+sheet = client.open(os.getenv('SPREADSHEET_FILENAME')).sheet1
 
 # Google Workspace API configuration
 WS_SCOPES = ["https://www.googleapis.com/auth/admin.directory.user"]
-WORKSPACE_CREDS = service_account.Credentials.from_service_account_file(config.GWORKSPACE_CREDS_FILE, scopes=WS_SCOPES)
-delegatedCreds = WORKSPACE_CREDS.with_subject(config.GWORKSPACE_ADMIN_ACCOUNT)
+WORKSPACE_CREDS = service_account.Credentials.from_service_account_file(os.getenv('GWORKSPACE_CREDS_FILE'), scopes=WS_SCOPES)
+delegatedCreds = WORKSPACE_CREDS.with_subject(os.getenv('GWORKSPACE_ADMIN_ACCOUNT'))
 service = build('admin', 'directory_v1', credentials=delegatedCreds)
 
 
@@ -41,15 +43,15 @@ service = build('admin', 'directory_v1', credentials=delegatedCreds)
 GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 
 creds = None
-if os.path.exists(config.GMAIL_TOKEN_FILE):
-    creds = Credentials.from_authorized_user_file(config.GMAIL_TOKEN_FILE, GMAIL_SCOPES)
+if os.path.exists(os.getenv('GMAIL_TOKEN_FILE')):
+    creds = Credentials.from_authorized_user_file(os.getenv('GMAIL_TOKEN_FILE'), GMAIL_SCOPES)
 if not creds or not creds.valid:
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(Request())
     else:
-        flow = InstalledAppFlow.from_client_secrets_file(config.GMAIL_CREDENTIALS_FILE, GMAIL_SCOPES)
+        flow = InstalledAppFlow.from_client_secrets_file(os.getenv('GMAIL_CREDENTIALS_FILE'), GMAIL_SCOPES)
         creds = flow.run_local_server(port=0)
-    with open(config.GMAIL_TOKEN_FILE, 'w') as token:
+    with open(os.getenv('GMAIL_TOKEN_FILE'), 'w') as token:
         token.write(creds.to_json())
 
 gmail_service = build('gmail', 'v1', credentials=creds)
@@ -75,10 +77,12 @@ def send_message(service, user_id, message):
         print(f'An error occurred: {e}')
         return None
 
+BOT_PROTECTED_ACCOUNTS = os.getenv('BOT_PROTECTED_ACCOUNTS').split(',')
+BOT_ALLOWED_USERS = os.getenv('BOT_ALLOWED_USERS').split(',')
+
 def is_authorized(username):
     """Check if a user is authorized to use the bot."""
-    #return username in authorized_users
-    return username in config.BOT_ALLOWED_USERS
+    return username in BOT_ALLOWED_USERS
 
 async def start(update: Update, context: CallbackContext) -> None:
     """Send a welcome message and instructions when the /start command is issued."""
@@ -93,7 +97,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         return
     try:
         # Remove the introductory part of the message
-        text = update.message.text
+        text = update.message.tsext
         if "Hey" in text or "Hi" in text:
             text = text.split("\n", 1)[1].strip()
         
@@ -146,7 +150,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
         # Send email with user credentials
         message_text = generate_email_text(first_name, last_name, desired_email, password)
-        message = create_message(config.GMAIL_SENDER_ADDRESS, secondary_email, "Access Details for Google Workspace Account", message_text, reply_to=config.GWORKSPACE_ADMIN_ACCOUNT)
+        message = create_message(os.getenv('GMAIL_SENDER_ADDRESS'), secondary_email, "Access Details for Google Workspace Account", message_text, reply_to=os.getenv('GWORKSPACE_ADMIN_ACCOUNT'))
         
         # Uncomment the next line to enable sending email with user credentials in Google Workspace
         send_message(gmail_service, 'me', message)
@@ -175,7 +179,7 @@ def generate_email_text(first_name, last_name, desired_email, password):
         Please log in and change your password immediately.
 
         Best regards,
-        {config.EMAIL_SIGNATURE_LASTLINE}
+        {os.getenv('EMAIL_SIGNATURE_LASTLINE')}
     """
     return text
 
@@ -231,7 +235,7 @@ async def add_user(update: Update, context: CallbackContext) -> None:
 
         # Send email with user credentials
         message_text = generate_email_text(first_name, last_name, desired_email, password)
-        message = create_message(config.GMAIL_SENDER_ADDRESS, secondary_email, "Access Details for Google Workspace Account", message_text, reply_to=config.GWORKSPACE_ADMIN_ACCOUNT)
+        message = create_message(os.getenv('GMAIL_SENDER_ADDRESS'), secondary_email, "Access Details for Google Workspace Account", message_text, reply_to=os.getenv('GWORKSPACE_ADMIN_ACCOUNT'))
 
         send_message(gmail_service, 'me', message)
 
@@ -249,7 +253,7 @@ async def suspend_user(update: Update, context: CallbackContext) -> None:
 
     try:
         email = context.args[0]
-        if email in config.BOT_PROTECTED_ACCOUNTS:
+        if email in BOT_PROTECTED_ACCOUNTS:
             await update.message.reply_text(f'The account with email {email} cannot be suspended.')
             return
 
@@ -269,7 +273,7 @@ async def get_user_info(update: Update, context: CallbackContext) -> None:
 
     try:
         email = context.args[0]
-        if email in config.BOT_PROTECTED_ACCOUNTS:
+        if email in BOT_PROTECTED_ACCOUNTS:
             await update.message.reply_text(f'The account info for email {email} cannot be disclosed.')
             return
         user = service.users().get(userKey=email).execute()
@@ -304,7 +308,7 @@ async def help_command(update: Update, context: CallbackContext) -> None:
 
 def main() -> None:
     """Start the bot."""
-    token = config.BOT_TOKEN
+    token = os.getenv('BOT_TOKEN')
     
     application = Application.builder().token(token).build()
     
