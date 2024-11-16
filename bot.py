@@ -304,6 +304,7 @@ async def help_command(update: Update, context: CallbackContext) -> None:
         "/userinfo <email> - Retrieve user information by their email address\n"
         "/adduser <First Name> <Last Name> <Desired Email> <Secondary Email> <Comment> - Add a new user to Google Workspace\n"
         "/listusers - Lists all users in Google Workspace\n"
+        "/resetpw <email> - Reset user's password and force change on next login\n"
         "/help - Show this help message"
     )
     await update.message.reply_text(help_text)
@@ -401,6 +402,62 @@ async def list_users(update: Update, context: CallbackContext) -> None:
         logger.error(f"Error retrieving users from Google Workspace: {e}")
         await update.message.reply_text('Error retrieving users from Google Workspace. Please try again later.')
 
+async def reset_password(update: Update, context: CallbackContext) -> None:
+    """Reset a user's password and force them to change it on next login."""
+    if not is_authorized(update.message.from_user.username):
+        await update.message.reply_text('You are not authorised to use this command.')
+        return
+
+    try:
+        
+        # Check if email was provided
+        if not context.args:
+            await update.message.reply_text('Please provide an email address. Usage: /resetpw <email>')
+            return
+            
+        email = context.args[0]
+        
+        # Check if it's a protected account
+        if email in BOT_PROTECTED_ACCOUNTS:
+            await update.message.reply_text(f'The password for {email} cannot be reset using this bot.')
+            return
+
+        # Generate new password
+        new_password = generate_random_password()
+
+        # Update user password
+        user_update = {
+            'password': new_password,
+            'changePasswordAtNextLogin': True
+        }
+
+        try:
+            service.users().update(userKey=email, body=user_update).execute()
+            
+            # Get user info for the response
+            user = service.users().get(userKey=email).execute()
+            first_name = user['name']['givenName']
+            last_name = user['name']['familyName']
+            
+            # Format response message
+            response = (
+                f"Password has been reset for {first_name} {last_name} ({email})\n\n"
+                f"New temporary password: `{new_password}`\n\n"
+                "User will be required to change password on next login."
+            )
+            
+            # Send response with password in monospace format
+            await update.message.reply_text(response, parse_mode='Markdown')
+            
+        except HttpError as e:
+            error_message = e._get_reason() if hasattr(e, '_get_reason') else str(e)
+            logger.error(f"Error resetting password: {error_message}")
+            await update.message.reply_text(f'Error resetting password: {error_message}')
+            
+    except Exception as e:
+        logger.error(f"Error in reset_password: {e}")
+        await update.message.reply_text(f'An error occurred while resetting the password. Please try again later.')
+
 def main() -> None:
     """Start the bot."""
     token = os.getenv('BOT_TOKEN')
@@ -413,6 +470,7 @@ def main() -> None:
     application.add_handler(CommandHandler("adduser", add_user))
     application.add_handler(CommandHandler("help", help_command))  # Add this line
     application.add_handler(CommandHandler("listusers", list_users))  # Add this line
+    application.add_handler(CommandHandler("resetpw", reset_password))  # Add this line
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     application.run_polling()
