@@ -28,14 +28,48 @@ from dotenv import load_dotenv
 from tabulate import tabulate
 from functools import wraps
 import inspect
+import logging.handlers
 
 load_dotenv()
 
 # Setup logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+#logging.basicConfig(
+#    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+#)
+#logger = logging.getLogger(__name__)
+
+def setup_logging():
+    """Setup logging configuration"""
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_format = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    console_handler.setFormatter(console_format)
+
+    # File handler with rotation
+    file_handler = logging.handlers.RotatingFileHandler(
+        'bot.log',
+        maxBytes=1024 * 1024,  # 1MB
+        backupCount=5
+    )
+    file_handler.setLevel(logging.INFO)
+    file_format = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    file_handler.setFormatter(file_format)
+
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+
+    return logger
+
+logger = setup_logging()
+
 
 # Google Sheets API configuration
 SCOPE = [
@@ -184,7 +218,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         return
     try:
         # Remove the introductory part of the message
-        text = update.message.tsext
+        text = update.message.text
         if "Hey" in text or "Hi" in text:
             text = text.split("\n", 1)[1].strip()
 
@@ -467,6 +501,7 @@ async def help_command(update: Update, context: CallbackContext) -> None:
         "/adduser <First Name> <Last Name> <Desired Email> <Secondary Email> <Comment> - Add a new user to Google Workspace\n"
         "/listusers - Lists all users in Google Workspace\n"
         "/resetpw <email> - Reset user's password and force change on next login\n"
+        "/health - Check bot and API health status\n"
         "/help - Show this help message"
     )
     await update.message.reply_text(help_text)
@@ -634,6 +669,68 @@ async def reset_password(update: Update, context: CallbackContext) -> None:
         )
 
 
+@log_to_sheet
+async def health(update: Update, context: CallbackContext) -> None:
+    """Check bot and API health status."""
+    if not is_authorized(update.message.from_user.username):
+        await update.message.reply_text('Not authorized')
+        return
+
+    status = {
+        'bot': '🟢 Online',
+        'google_workspace': '🔄 Checking...',
+        'google_sheets': '🔄 Checking...'
+    }
+
+    try:
+        # Check Google Workspace API
+        service.users().list(customer='my_customer', maxResults=1).execute()
+        status['google_workspace'] = '🟢 Connected'
+    except Exception as e:
+        status['google_workspace'] = f'🔴 Error: {str(e)}'
+
+    try:
+        # Check Google Sheets API
+        sheet.get_all_values()
+        status['google_sheets'] = '🟢 Connected'
+    except Exception as e:
+        status['google_sheets'] = f'🔴 Error: {str(e)}'
+
+    status_message = "\n".join([f"{k}: {v}" for k, v in status.items()])
+    await update.message.reply_text(status_message)
+
+
+def setup_logging():
+    """Setup logging configuration"""
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_format = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    console_handler.setFormatter(console_format)
+
+    # File handler with rotation
+    file_handler = logging.handlers.RotatingFileHandler(
+        'bot.log',
+        maxBytes=1024 * 1024,  # 1MB
+        backupCount=5
+    )
+    file_handler.setLevel(logging.INFO)
+    file_format = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    file_handler.setFormatter(file_format)
+
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+
+    return logger
+
+
 def main() -> None:
     """Start the bot."""
     token = os.getenv("BOT_TOKEN")
@@ -647,6 +744,7 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))  # Add this line
     application.add_handler(CommandHandler("listusers", list_users))  # Add this line
     application.add_handler(CommandHandler("resetpw", reset_password))  # Add this line
+    application.add_handler(CommandHandler("health", health))  # Add this line
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
     )
