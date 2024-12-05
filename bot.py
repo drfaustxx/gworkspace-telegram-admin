@@ -320,13 +320,14 @@ def generate_email_text(first_name, last_name, desired_email, password):
     text = f"""
         Hello, {first_name} {last_name}!
 
-        Here are your access details for the Google Workspace account:
+        Please find below your access details for the Google Workspace account:
 
         Login page: https://mail.google.com/
         Username: {desired_email}
         Password: {password}
 
-        Please log in and change your password immediately.
+        You will be required to change your password upon your first login.
+        After changing your password, setting up 2-Factor Authentication (2FA) is mandatory.
 
         Best regards,
         {os.getenv('EMAIL_SIGNATURE_LASTLINE')}
